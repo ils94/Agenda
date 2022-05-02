@@ -11,17 +11,29 @@ from tkinter import ttk
 import psycopg2
 import json
 
-inserir_banco = "INSERT INTO AGENDA (ATENDENTE, SOLICITANTE, ASSUNTO, DATA, HORA, URGENCIA, MENSAGEM) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-carregar_banco = "SELECT * FROM AGENDA"
-editar_banco = "UPDATE AGENDA SET ATENDENTE = %s, SOLICITANTE = %s, ASSUNTO = %s, DATA = %s, HORA = %s, URGENCIA = %s, MENSAGEM = %s WHERE ID = %s"
-deletar_banco = "DELETE FROM AGENDA WHERE ID = %s"
-pesquisar_banco = "SELECT * FROM AGENDA WHERE ATENDENTE ILIKE %s OR SOLICITANTE ILIKE %s OR ASSUNTO ILIKE %s OR DATA ILIKE %s OR HORA ILIKE %s OR URGENCIA ILIKE %s OR MENSAGEM ILIKE %s"
+inserir_query = "INSERT INTO AGENDA (ATENDENTE, SOLICITANTE, ASSUNTO, DATA, HORA, STATUS, CONCLUIDO, DETALHES) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+
+carregar_query = "SELECT * FROM AGENDA"
+
+alterar_query = "UPDATE AGENDA SET ATENDENTE = %s, SOLICITANTE = %s, ASSUNTO = %s, DATA = %s, HORA = %s, STATUS = %s, DETALHES = %s WHERE ID = %s"
+
+concluido_query = "UPDATE AGENDA SET STATUS = %s, CONCLUIDO = %s WHERE ID = %s"
+
+reabrir_query = "UPDATE AGENDA SET STATUS = %s, CONCLUIDO = %s WHERE ID = %s"
+
+deletar_query = "DELETE FROM AGENDA WHERE ID = %s"
+
+pesquisar_query = "SELECT * FROM AGENDA WHERE ATENDENTE ILIKE %s OR SOLICITANTE ILIKE %s OR ASSUNTO ILIKE %s OR DATA ILIKE %s OR HORA ILIKE %s OR STATUS ILIKE %s OR CONCLUIDO ILIKE %s OR DETALHES ILIKE %s"
 
 user_home = "Z:/" + str(os.getlogin())
 
 json_arquivo = pathlib.Path(user_home + "/agenda/cfg.json")
 
 banco = None
+
+timer = None
+
+atendente = ""
 
 
 def fixed_map(option):
@@ -32,7 +44,7 @@ def fixed_map(option):
 root = Tk()
 
 janela_width = 750
-janela_height = 760
+janela_height = 730
 
 screen_width = root.winfo_screenwidth()
 screen_height = root.winfo_screenheight()
@@ -40,14 +52,37 @@ screen_height = root.winfo_screenheight()
 x = (screen_width / 2) - (janela_width / 2)
 y = (screen_height / 2) - (janela_height / 2)
 
-root.geometry("750x760+" + str(int(x)) + "+" + str(int(y)))
+root.geometry("750x730+" + str(int(x)) + "+" + str(int(y)))
 root.title("Agenda")
 root.resizable(False, False)
 root.iconbitmap("icones/agenda.ico")
 
 
-def criar_json(usuario, dbName, dbUser, dbPass, dbHost):
+def usuario_inativo():
+    global banco
 
+    banco.close()
+
+    pergunta = messagebox.askyesno("Desconectado",
+                                   "Você foi desconectado por inatividade.\n\nDeseja se reconectar com o banco?")
+
+    if pergunta:
+        multithreading(conectar)
+        reset_timer()
+    else:
+        sys.exit()
+
+
+def reset_timer(event=None):
+    global timer
+
+    if timer is not None:
+        root.after_cancel(timer)
+
+    timer = root.after(60000, usuario_inativo)
+
+
+def criar_json(usuario, dbName, dbUser, dbPass, dbHost):
     data = {}
 
     data['atendente'] = usuario
@@ -64,7 +99,6 @@ def criar_json(usuario, dbName, dbUser, dbPass, dbHost):
 
 
 def salvar_credenciais():
-
     credenciais = Toplevel(root)
     credenciais.geometry("300x160+" + str(int(x)) + "+" + str(int(y)))
     credenciais.resizable(False, False)
@@ -152,12 +186,12 @@ def data_hora():
     dia_format = dia_string[2] + '/' + dia_string[1] + '/' + dia_string[0]
     dia_format_ext = dia_format.replace("/01/", "/jan/").replace("/02/", "/fev/").replace("/03/",
                                                                                           "/mar/").replace(
-        "/04/", "/abri/").replace("/05/", "/mai/").replace("/06/", "/jun/").replace("/07/", "/jul/").replace("/08/",
-                                                                                                             "/ago/").replace(
+        "/04/", "/abr/").replace("/05/", "/mai/").replace("/06/", "/jun/").replace("/07/", "/jul/").replace("/08/",
+                                                                                                            "/ago/").replace(
         "/09/", "/set/").replace("/10/", "/out/").replace("/11/", "/nov/").replace("/12/", "/dez/")
 
     hora = datetime.now()
-    hora_atual = hora.strftime("%H:%M:%S")
+    hora_atual = hora.strftime("%H:%M")
 
     entry_hora.delete(0, END)
     entry_data.delete(0, END)
@@ -171,12 +205,19 @@ def mensagens_de_erro(e):
 
 def conectar():
     global banco
+    global atendente
 
     try:
 
         if json_arquivo.exists():
             with open(json_arquivo) as js:
                 dados = json.load(js)
+
+                atendente = dados["atendente"]
+
+                entry_atendete.delete(0, END)
+
+                entry_atendete.insert(0, atendente)
 
                 DB_NAME = dados["dbName"]
                 DB_USER = dados["dbUser"]
@@ -192,6 +233,15 @@ def conectar():
         mensagens_de_erro(e)
 
 
+def reconectar_banco():
+    global banco
+
+    if banco is not None:
+        banco.close()
+
+    multithreading(conectar)
+
+
 def banco_queries(**kwargs):
     global banco
 
@@ -201,22 +251,33 @@ def banco_queries(**kwargs):
     carregar = kwargs.get("carregar")
     pesquisar = kwargs.get("pesquisar")
 
-    try:
-        if modificar:
-            cursor = banco.cursor()
-            cursor.execute(modificar, variaveis)
-            banco.commit()
-            carregar_agenda()
-        if carregar:
-            cursor = banco.cursor()
-            cursor.execute(carregar)
-            return cursor
-        if pesquisar:
-            cursor = banco.cursor()
-            cursor.execute(pesquisar, variaveis)
-            return cursor
-    except Exception as e:
-        mensagens_de_erro(e)
+    if len(entry_atendete.get()) > 30:
+        mensagens_de_erro("Atendente não pode ter mais que 30 caracteres.")
+    elif len(entry_solicitante.get()) > 30:
+        mensagens_de_erro("Solicitante não pode ter mais que 30 caracteres.")
+    elif len(entry_data.get()) > 11:
+        mensagens_de_erro("Data não pode ter mais que 11 caracteres.")
+    elif len(entry_hora.get()) > 5:
+        mensagens_de_erro("Hora não pode ter mais que 5 caracteres.")
+    elif len(entry_assunto.get()) > 30:
+        mensagens_de_erro("Assunto não pode ter mais que 30 caracteres.")
+    else:
+        try:
+            if modificar:
+                cursor = banco.cursor()
+                cursor.execute(modificar, variaveis)
+                banco.commit()
+                carregar_agenda()
+            if carregar:
+                cursor = banco.cursor()
+                cursor.execute(carregar)
+                return cursor
+            if pesquisar:
+                cursor = banco.cursor()
+                cursor.execute(pesquisar, variaveis)
+                return cursor
+        except Exception as e:
+            mensagens_de_erro(e)
 
 
 def inserir_agenda():
@@ -231,12 +292,13 @@ def inserir_agenda():
                          entry_data.get().upper(),
                          entry_hora.get().upper(),
                          variavel.get().upper(),
+                         "AINDA EM ABERTO",
                          text_mensagem.get("1.0", END).upper())
-            banco_queries(modificar=inserir_banco, variaveis=variaveis)
+            banco_queries(modificar=inserir_query, variaveis=variaveis)
 
 
 def carregar_agenda():
-    cursor = banco_queries(carregar=carregar_banco)
+    cursor = banco_queries(carregar=carregar_query)
     inserir_visualizador(cursor)
 
 
@@ -251,7 +313,33 @@ def alterar_agenda():
                      entry_data.get().upper(), entry_hora.get().upper(), variavel.get().upper(),
                      text_mensagem.get("1.0", END).upper(), id)
 
-        banco_queries(modificar=editar_banco, variaveis=variaveis)
+        banco_queries(modificar=alterar_query, variaveis=variaveis)
+
+
+def concluido_agenda():
+    global id
+
+    pergunta = messagebox.askyesno("Concluir Tarefa", "Marcar a tarefa com o ID: '" + str(id) + "' como concluída?")
+
+    if pergunta:
+        variaveis = ("RESOLVIDO", atendente, id)
+
+        banco_queries(modificar=concluido_query, variaveis=variaveis)
+
+        carregar_agenda()
+
+
+def reabrir_tarefa():
+    global id
+
+    pergunta = messagebox.askyesno("Reabrir Tarefa", "Reabrir a tarefa com o ID: '" + str(id) + "' ?")
+
+    if pergunta:
+        variaveis = (variavel.get(), "AINDA EM ABERTO", id)
+
+        banco_queries(modificar=reabrir_query, variaveis=variaveis)
+
+        carregar_agenda()
 
 
 def deletar_agenda():
@@ -261,7 +349,7 @@ def deletar_agenda():
                                    "Deletar a entrada com o id: '" + str(id) + "'")
     if pergunta:
         variaveis = (id,)
-        banco_queries(modificar=deletar_banco, variaveis=variaveis)
+        banco_queries(modificar=deletar_query, variaveis=variaveis)
 
 
 def pesquisar_agenda(event):
@@ -272,9 +360,10 @@ def pesquisar_agenda(event):
         "%" + entry_pesquisar.get() + "%",
         "%" + entry_pesquisar.get() + "%",
         "%" + entry_pesquisar.get() + "%",
+        "%" + entry_pesquisar.get() + "%",
         "%" + entry_pesquisar.get() + "%")
 
-    cursor = banco_queries(pesquisar=pesquisar_banco, variaveis=variaveis)
+    cursor = banco_queries(pesquisar=pesquisar_query, variaveis=variaveis)
     inserir_visualizador(cursor)
 
 
@@ -295,8 +384,8 @@ def items(event):
     entry_assunto.insert(0, tv.item(tv.selection())["values"][3])
     entry_data.insert(0, tv.item(tv.selection())["values"][4])
     entry_hora.insert(0, tv.item(tv.selection())["values"][5])
-    variavel.set(tv.item(tv.selection())["values"][6])
-    text_mensagem.insert('1.0', tv.item(tv.selection())["values"][7])
+    variavel.set(tv.item(tv.selection())["values"][6].replace("RESOLVIDO", "NORMAL"))
+    text_mensagem.insert('1.0', tv.item(tv.selection())["values"][8])
 
 
 def destacar_rows():
@@ -320,55 +409,42 @@ def inserir_visualizador(cursor):
         tv.delete(*tv.get_children())
         for row in cursor:
             tv.insert("", index="end", values=(
-                row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]), tags=(row[6],))
+                row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8]), tags=(row[6],))
     except Exception as e:
         mensagens_de_erro(e)
 
 
 menu_bar = Menu(root)
 
-salvar_cfg = Menu(menu_bar, tearoff=0)
+menu = Menu(menu_bar, tearoff=0)
 
-salvar_cfg.add_command(label="Salvar Credenciais", command=salvar_credenciais)
+menu.add_command(label="Salvar Credenciais", command=salvar_credenciais)
+menu.add_command(label="Reconectar", command=reconectar_banco)
 
-menu_bar.add_cascade(label="Menu", menu=salvar_cfg)
+menu_bar.add_cascade(label="Menu", menu=menu)
 
 root.config(menu=menu_bar)
 
-labelframe_dados = LabelFrame(root, text='Inserir dados')
-labelframe_dados.pack(side=TOP, padx=5, pady=5)
+labelframe_1 = LabelFrame(root)
+labelframe_1.pack(fill=X, padx=5)
 
-label_atendente = Label(labelframe_dados, text='Atendente', width=20, height=1)
+label_atendente = Label(labelframe_1, text='Atendente', width=20, height=1)
+entry_atendete = Entry(labelframe_1, width=20)
 
-entry_atendete = Entry(labelframe_dados, width=20)
-entry_atendete.bind('<FocusIn>', auto_completar)
+label_solicitante = Label(labelframe_1, text='Solicitante', width=20, height=1)
+entry_solicitante = Entry(labelframe_1, width=20)
 
-label_solicitante = Label(labelframe_dados, text='Solicitante', width=20, height=1)
+label_data = Label(labelframe_1, text='Data', width=20, height=1)
+entry_data = Entry(labelframe_1, width=20)
 
-entry_solicitante = Entry(labelframe_dados, width=20)
-
-label_data = Label(labelframe_dados, text='Data', width=20, height=1)
-
-entry_data = Entry(labelframe_dados, width=20)
-
-label_hora = Label(labelframe_dados, text='Hora', width=20, height=1)
-
-entry_hora = Entry(labelframe_dados, width=20)
+label_hora = Label(labelframe_1, text='Hora', width=20, height=1)
+entry_hora = Entry(labelframe_1, width=20)
 
 variavel = StringVar(root)
 variavel.set("NORMAL")
 
-label_status = Label(labelframe_dados, text='Status', width=20, height=1)
-
-op_status = OptionMenu(labelframe_dados, variavel, 'NORMAL', 'URGENTE', 'RESOLVIDO')
-
-button_adicionar = Button(root, text='Adicionar', width=10, height=1, command=lambda: multithreading(inserir_agenda))
-
-button_editar = Button(root, text='Editar', width=10, height=1, command=lambda: multithreading(alterar_agenda))
-
-button_tempo = Button(root, text='Hora e Dia', width=10, height=1, command=data_hora)
-
-button_limpar = Button(root, text='Limpar Campos', width=15, height=1, command=limpar_campos)
+label_status = Label(labelframe_1, text="Status", width=20, height=1)
+op_status = OptionMenu(labelframe_1, variavel, "NORMAL", "URGENTE")
 
 label_atendente.grid(row=0, column=0)
 label_solicitante.grid(row=0, column=1)
@@ -382,40 +458,66 @@ entry_data.grid(row=1, column=2)
 entry_hora.grid(row=1, column=3)
 op_status.grid(row=1, column=4)
 
-button_adicionar.place(x=10, y=80)
-button_editar.place(x=95, y=80)
-button_tempo.place(x=180, y=80)
-button_limpar.place(x=625, y=340)
+frame_1 = Frame(root)
+frame_1.pack(fill=X, pady=5)
 
-labelframe_mensagem = LabelFrame(root, text='Mensagem', width=730, height=220)
-labelframe_mensagem.pack(pady=30)
+button_adicionar = Button(frame_1, text='Adicionar', width=10, height=1, command=lambda: multithreading(inserir_agenda))
+button_editar = Button(frame_1, text='Editar', width=10, height=1, command=lambda: multithreading(alterar_agenda))
+button_tempo = Button(frame_1, text='Hora e Dia', width=10, height=1, command=data_hora)
 
-label_assunto = Label(labelframe_mensagem, text='Assunto:', width=20, height=1, anchor=W).place(x=5, y=0)
-entry_assunto = Entry(labelframe_mensagem, width=110)
-entry_assunto.place(x=56, y=2)
+button_adicionar.pack(side=LEFT, padx=5)
+button_editar.pack(side=LEFT, padx=5)
+button_tempo.pack(side=LEFT, padx=5)
 
-text_mensagem = Text(labelframe_mensagem, width=89, height=10)
-text_mensagem.place(x=5, y=30)
+labelframe_2 = LabelFrame(root)
+labelframe_2.pack(fill=X, padx=5)
 
-labelframe_pesquisa = LabelFrame(root, text='Pesquisar', width=265, height=50)
-labelframe_pesquisa.place(x=10, y=330)
+frame_2 = Frame(labelframe_2)
+frame_2.pack(fill=X, pady=5)
+
+label_assunto = Label(frame_2, text="Assunto:", width=10, height=1)
+label_assunto.pack(side=LEFT)
+
+entry_assunto = Entry(frame_2, width=107)
+entry_assunto.pack(side=LEFT, padx=5)
+
+text_mensagem = Text(labelframe_2, width=89, height=10)
+text_mensagem.pack(padx=5, pady=5)
+
+frame_3 = Frame(root)
+frame_3.pack(fill=X)
+
+labelframe_pesquisa = LabelFrame(frame_3, text="Pesquisar:", width=265, height=50)
+labelframe_pesquisa.pack(side=LEFT, padx=5)
 
 entry_pesquisar = Entry(labelframe_pesquisa, width=40)
+entry_pesquisar.pack(side=LEFT, padx=5, pady=5)
 entry_pesquisar.bind("<Return>", pesquisar_agenda)
-
-button_carregar = Button(root, text='Carregar', width=10, height=1, command=lambda: multithreading(carregar_agenda))
-
-button_deletar = Button(root, text='Deletar', width=10, height=1, command=lambda: multithreading(deletar_agenda))
-
-button_destacar = Button(root, text='Com Cores', width=10, height=1, command=destacar_rows)
-
-labelframe_agenda = LabelFrame(root, text='Agenda', width=730, height=300)
 
 entry_pesquisar.pack(padx=5, pady=5)
 
-button_carregar.place(x=10, y=385)
-button_destacar.place(x=95, y=385)
-button_deletar.place(x=660, y=385)
+button_limpar = Button(frame_3, text='Limpar Campos', width=15, height=1, command=limpar_campos)
+
+button_limpar.pack(side=TOP, anchor=E, padx=5, pady=5)
+
+frame_4 = Frame(root)
+frame_4.pack(fill=X, pady=5)
+
+button_carregar = Button(frame_4, text="Carregar", width=10, height=1, command=lambda: multithreading(carregar_agenda))
+button_destacar = Button(frame_4, text="Com Cores", width=10, height=1, command=destacar_rows)
+button_concluido = Button(frame_4, text="Concluído", width=10, height=1,
+                          command=lambda: multithreading(concluido_agenda))
+button_reabrir = Button(frame_4, text="Reabrir", width=10, height=1, command=lambda: multithreading(reabrir_tarefa))
+button_deletar = Button(frame_4, text="Deletar", width=10, height=1, command=lambda: multithreading(deletar_agenda))
+
+button_carregar.pack(side=LEFT, padx=5)
+button_destacar.pack(side=LEFT, padx=5)
+button_concluido.pack(side=LEFT, padx=5)
+button_reabrir.pack(side=LEFT, padx=5)
+button_deletar.pack(side=RIGHT, padx=5)
+
+labelframe_3 = LabelFrame(root, text="Agenda")
+labelframe_3.pack(padx=5)
 
 style = ttk.Style()
 
@@ -423,13 +525,13 @@ style.map("Treeview", foreground=fixed_map("foreground"), background=fixed_map("
 
 style.configure('Treeview', rowheight=25)
 
-xsb = ttk.Scrollbar(labelframe_agenda, orient=HORIZONTAL)
+xsb = ttk.Scrollbar(labelframe_3, orient=HORIZONTAL)
 xsb.pack(side=BOTTOM, fill=X)
 
-ysb = ttk.Scrollbar(labelframe_agenda, orient=VERTICAL)
+ysb = ttk.Scrollbar(labelframe_3, orient=VERTICAL)
 ysb.pack(side=RIGHT, fill=Y)
 
-tv = ttk.Treeview(labelframe_agenda, selectmode='browse', show='headings', xscrollcommand=xsb.set,
+tv = ttk.Treeview(labelframe_3, selectmode='browse', show='headings', xscrollcommand=xsb.set,
                   yscrollcommand=ysb.set)
 
 tv.bind("<<TreeviewSelect>>", items)
@@ -437,7 +539,7 @@ tv.bind("<<TreeviewSelect>>", items)
 xsb.config(command=tv.xview)
 ysb.config(command=tv.yview)
 
-tv['columns'] = ("ID", "Atendente", "Solicitante", "Assunto", "Data", "Hora", "Urgencia", "Mensagem")
+tv['columns'] = ("ID", "Atendente", "Solicitante", "Assunto", "Data", "Hora", "Status", "Concluído por", "Detalhes")
 
 tv.column("#0", width=2, minwidth=1)
 tv.column("ID", width=25, minwidth=10)
@@ -446,8 +548,9 @@ tv.column("Solicitante", width=100, minwidth=10)
 tv.column("Assunto", width=300, minwidth=10)
 tv.column("Data", width=100, minwidth=10)
 tv.column("Hora", width=100, minwidth=10)
-tv.column("Urgencia", width=100, minwidth=10)
-tv.column("Mensagem", width=1, minwidth=1)
+tv.column("Status", width=100, minwidth=10)
+tv.column("Concluído por", width=200, minwidth=10)
+tv.column("Detalhes", width=1, minwidth=1)
 
 tv.heading("#0", text="", anchor=W)
 tv.heading("ID", text="ID", anchor=W)
@@ -456,11 +559,12 @@ tv.heading("Solicitante", text="Solicitante", anchor=W)
 tv.heading("Assunto", text="Assunto", anchor=W)
 tv.heading("Data", text="Data", anchor=W)
 tv.heading("Hora", text="Hora", anchor=W)
-tv.heading("Urgencia", text="Urgencia", anchor=W)
-tv.heading("Mensagem", text="Mensagem", anchor=W)
+tv.heading("Status", text="Status", anchor=W)
+tv.heading("Concluído por", text="Concluído por", anchor=W)
+tv.heading("Detalhes", text="Detalhes", anchor=W)
 
 tv.pack(padx=5, pady=5)
-labelframe_agenda.pack(side=BOTTOM, padx=5, pady=5)
+labelframe_3.pack()
 
 atendente = pathlib.Path(user_home + "/agenda")
 
@@ -468,5 +572,8 @@ if not atendente.exists():
     os.makedirs(user_home + "/agenda")
 
 conectar()
+
+root.bind_all("<Any-KeyPress>", reset_timer)
+root.bind_all("<Any-ButtonPress>", reset_timer)
 
 root.mainloop()
