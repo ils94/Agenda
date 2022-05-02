@@ -11,7 +11,7 @@ from tkinter import ttk
 import psycopg2
 import json
 
-inserir_query = "INSERT INTO AGENDA (ATENDENTE, SOLICITANTE, ASSUNTO, DATA, HORA, STATUS, CONCLUIDO, DETALHES) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+inserir_query = "INSERT INTO AGENDA (ATENDENTE, SOLICITANTE, ASSUNTO, DATA, HORA, STATUS, CONCLUIDO, REABERTO, DETALHES) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
 
 carregar_query = "SELECT * FROM AGENDA"
 
@@ -19,21 +19,22 @@ alterar_query = "UPDATE AGENDA SET ATENDENTE = %s, SOLICITANTE = %s, ASSUNTO = %
 
 concluido_query = "UPDATE AGENDA SET STATUS = %s, CONCLUIDO = %s WHERE ID = %s"
 
-reabrir_query = "UPDATE AGENDA SET STATUS = %s, CONCLUIDO = %s WHERE ID = %s"
+reabrir_query = "UPDATE AGENDA SET STATUS = %s, CONCLUIDO = %s, REABERTO = %s WHERE ID = %s"
 
 deletar_query = "DELETE FROM AGENDA WHERE ID = %s"
 
-pesquisar_query = "SELECT * FROM AGENDA WHERE ATENDENTE ILIKE %s OR SOLICITANTE ILIKE %s OR ASSUNTO ILIKE %s OR DATA ILIKE %s OR HORA ILIKE %s OR STATUS ILIKE %s OR CONCLUIDO ILIKE %s OR DETALHES ILIKE %s"
+pesquisar_query = "SELECT * FROM AGENDA WHERE ATENDENTE ILIKE %s OR SOLICITANTE ILIKE %s OR ASSUNTO ILIKE %s OR DATA ILIKE %s OR HORA ILIKE %s OR STATUS ILIKE %s OR CONCLUIDO ILIKE %s OR REABERTO ILIKE %s OR DETALHES ILIKE %s"
 
 user_home = "Z:/" + str(os.getlogin())
 
 json_arquivo = pathlib.Path(user_home + "/agenda/cfg.json")
 
 banco = None
-
 timer = None
 
 atendente = ""
+status = ""
+id = ""
 
 
 def fixed_map(option):
@@ -293,13 +294,18 @@ def inserir_agenda():
                          entry_hora.get().upper(),
                          variavel.get().upper(),
                          "AINDA EM ABERTO",
+                         "NINGUEM",
                          text_mensagem.get("1.0", END).upper())
             banco_queries(modificar=inserir_query, variaveis=variaveis)
 
 
 def carregar_agenda():
+    global id
+
     cursor = banco_queries(carregar=carregar_query)
     inserir_visualizador(cursor)
+
+    id = ""
 
 
 def alterar_agenda():
@@ -309,37 +315,51 @@ def alterar_agenda():
                                    'Essa ação irá alterar o Processo com o ID: "' + str(
                                        id) + '" com os valores dos campos acima, deseja continuar?')
     if pergunta:
-        variaveis = (entry_atendete.get().upper(), entry_solicitante.get().upper(), entry_assunto.get().upper(),
-                     entry_data.get().upper(), entry_hora.get().upper(), variavel.get().upper(),
-                     text_mensagem.get("1.0", END).upper(), id)
+        if status == "RESOLVIDO":
+            mensagens_de_erro("Não é possível editar uma tarefa já concluída.")
+        elif id == "":
+            mensagens_de_erro("Selecione um item na Agenda primeiro.")
+        else:
+            variaveis = (entry_atendete.get().upper(), entry_solicitante.get().upper(), entry_assunto.get().upper(),
+                         entry_data.get().upper(), entry_hora.get().upper(), variavel.get().upper(),
+                         text_mensagem.get("1.0", END).upper(), id)
 
-        banco_queries(modificar=alterar_query, variaveis=variaveis)
+            banco_queries(modificar=alterar_query, variaveis=variaveis)
 
 
 def concluido_agenda():
     global id
+    global atendente
+    global status
 
     pergunta = messagebox.askyesno("Concluir Tarefa", "Marcar a tarefa com o ID: '" + str(id) + "' como concluída?")
 
     if pergunta:
-        variaveis = ("RESOLVIDO", atendente, id)
+        if status == "RESOLVIDO":
+            mensagens_de_erro("A tarefa já está marcada como resolvida.")
+        elif id == "":
+            mensagens_de_erro("Selecione um item na Agenda primeiro.")
+        else:
+            variaveis = ("RESOLVIDO", atendente, id)
 
-        banco_queries(modificar=concluido_query, variaveis=variaveis)
-
-        carregar_agenda()
+            banco_queries(modificar=concluido_query, variaveis=variaveis)
 
 
 def reabrir_tarefa():
     global id
+    global atendente
 
     pergunta = messagebox.askyesno("Reabrir Tarefa", "Reabrir a tarefa com o ID: '" + str(id) + "' ?")
 
     if pergunta:
-        variaveis = (variavel.get(), "AINDA EM ABERTO", id)
+        if status == "URGENTE" or status == "NORMAL":
+            mensagens_de_erro("A tarefa já está em aberto.")
+        elif id == "":
+            mensagens_de_erro("Selecione um item na Agenda primeiro.")
+        else:
+            variaveis = (variavel.get(), "AINDA EM ABERTO", atendente, id)
 
-        banco_queries(modificar=reabrir_query, variaveis=variaveis)
-
-        carregar_agenda()
+            banco_queries(modificar=reabrir_query, variaveis=variaveis)
 
 
 def deletar_agenda():
@@ -348,8 +368,11 @@ def deletar_agenda():
     pergunta = messagebox.askyesno("Deletar",
                                    "Deletar a entrada com o id: '" + str(id) + "'")
     if pergunta:
-        variaveis = (id,)
-        banco_queries(modificar=deletar_query, variaveis=variaveis)
+        if id == "":
+            mensagens_de_erro("Selecione um item na Agenda primeiro.")
+        else:
+            variaveis = (id,)
+            banco_queries(modificar=deletar_query, variaveis=variaveis)
 
 
 def pesquisar_agenda(event):
@@ -369,6 +392,7 @@ def pesquisar_agenda(event):
 
 def items(event):
     global id
+    global status
 
     entry_atendete.delete(0, END)
     entry_solicitante.delete(0, END)
@@ -385,7 +409,8 @@ def items(event):
     entry_data.insert(0, tv.item(tv.selection())["values"][4])
     entry_hora.insert(0, tv.item(tv.selection())["values"][5])
     variavel.set(tv.item(tv.selection())["values"][6].replace("RESOLVIDO", "NORMAL"))
-    text_mensagem.insert('1.0', tv.item(tv.selection())["values"][8])
+    status = tv.item(tv.selection())["values"][6]
+    text_mensagem.insert('1.0', tv.item(tv.selection())["values"][9])
 
 
 def destacar_rows():
@@ -409,7 +434,7 @@ def inserir_visualizador(cursor):
         tv.delete(*tv.get_children())
         for row in cursor:
             tv.insert("", index="end", values=(
-                row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8]), tags=(row[6],))
+                row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9]), tags=(row[6],))
     except Exception as e:
         mensagens_de_erro(e)
 
@@ -539,7 +564,8 @@ tv.bind("<<TreeviewSelect>>", items)
 xsb.config(command=tv.xview)
 ysb.config(command=tv.yview)
 
-tv['columns'] = ("ID", "Atendente", "Solicitante", "Assunto", "Data", "Hora", "Status", "Concluído por", "Detalhes")
+tv['columns'] = (
+    "ID", "Atendente", "Solicitante", "Assunto", "Data", "Hora", "Status", "Concluído por", "Reaberto por", "Detalhes")
 
 tv.column("#0", width=2, minwidth=1)
 tv.column("ID", width=25, minwidth=10)
@@ -550,6 +576,7 @@ tv.column("Data", width=100, minwidth=10)
 tv.column("Hora", width=100, minwidth=10)
 tv.column("Status", width=100, minwidth=10)
 tv.column("Concluído por", width=200, minwidth=10)
+tv.column("Reaberto por", width=200, minwidth=10)
 tv.column("Detalhes", width=1, minwidth=1)
 
 tv.heading("#0", text="", anchor=W)
@@ -561,6 +588,7 @@ tv.heading("Data", text="Data", anchor=W)
 tv.heading("Hora", text="Hora", anchor=W)
 tv.heading("Status", text="Status", anchor=W)
 tv.heading("Concluído por", text="Concluído por", anchor=W)
+tv.heading("Reaberto por", text="Reaberto por", anchor=W)
 tv.heading("Detalhes", text="Detalhes", anchor=W)
 
 tv.pack(padx=5, pady=5)
