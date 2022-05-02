@@ -252,15 +252,15 @@ def banco_queries(**kwargs):
     carregar = kwargs.get("carregar")
     pesquisar = kwargs.get("pesquisar")
 
-    if len(entry_atendete.get()) > 30:
+    if len(entry_atendete.get()) > 50:
         mensagens_de_erro("Atendente não pode ter mais que 30 caracteres.")
-    elif len(entry_solicitante.get()) > 30:
+    elif len(entry_solicitante.get()) > 50:
         mensagens_de_erro("Solicitante não pode ter mais que 30 caracteres.")
     elif len(entry_data.get()) > 11:
         mensagens_de_erro("Data não pode ter mais que 11 caracteres.")
     elif len(entry_hora.get()) > 5:
         mensagens_de_erro("Hora não pode ter mais que 5 caracteres.")
-    elif len(entry_assunto.get()) > 30:
+    elif len(entry_assunto.get()) > 50:
         mensagens_de_erro("Assunto não pode ter mais que 30 caracteres.")
     else:
         try:
