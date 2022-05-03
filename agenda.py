@@ -31,6 +31,7 @@ json_arquivo = pathlib.Path(user_home + "/agenda/cfg.json")
 
 banco = None
 timer = None
+credenciais = None
 
 atendente = ""
 status = ""
@@ -62,16 +63,19 @@ root.iconbitmap("icones/agenda.ico")
 def usuario_inativo():
     global banco
 
-    banco.close()
+    if banco is not None:
+        banco.close()
 
-    pergunta = messagebox.askyesno("Desconectado",
-                                   "Você foi desconectado por inatividade.\n\nDeseja se reconectar com o banco?")
+        pergunta = messagebox.askyesno("Desconectado",
+                                       "Você foi desconectado por inatividade.\n\nDeseja se reconectar com o banco?")
 
-    if pergunta:
-        multithreading(conectar)
-        reset_timer()
+        if pergunta:
+            multithreading(conectar)
+            reset_timer()
+        else:
+            sys.exit()
     else:
-        sys.exit()
+        reset_timer()
 
 
 def reset_timer(event=None):
@@ -83,33 +87,51 @@ def reset_timer(event=None):
     timer = root.after(60000, usuario_inativo)
 
 
-def criar_json(usuario, dbName, dbUser, dbPass, dbHost):
-    data = {}
+def criar_json(usuario, dbName, dbUser, dbPass, dbHost, dbPort):
+    global credenciais
 
-    data['atendente'] = usuario
-    data['dbName'] = dbName
-    data['dbUser'] = dbUser
-    data['dbPass'] = dbPass
-    data['dbHost'] = dbHost
+    try:
+        data = {}
 
-    json_data = json.dumps(data)
+        data['atendente'] = usuario
+        data['dbName'] = dbName
+        data['dbUser'] = dbUser
+        data['dbPass'] = dbPass
+        data['dbHost'] = dbHost
+        data['dbPort'] = dbPort
 
-    salvar_json = open(user_home + "/agenda/cfg.json", "w")
-    salvar_json.write(str(json_data))
-    salvar_json.close()
+        json_data = json.dumps(data)
+
+        salvar_json = open(user_home + "/agenda/cfg.json", "w")
+        salvar_json.write(str(json_data))
+        salvar_json.close()
+
+        messagebox.showinfo("Salvo", "As credenciais foram salvas com sucesso.")
+
+        credenciais.destroy()
+
+        conectar()
+
+    except Exception as e:
+        mensagens_de_erro(e)
 
 
 def salvar_credenciais():
+    global credenciais
+
     credenciais = Toplevel(root)
-    credenciais.geometry("300x160+" + str(int(x)) + "+" + str(int(y)))
+    credenciais.geometry("300x180+" + str(int(x)) + "+" + str(int(y)))
     credenciais.resizable(False, False)
     credenciais.iconbitmap("icones/cadeado.ico")
     credenciais.title("Salvar Credenciais")
     credenciais.attributes("-topmost", True)
 
     def salvar():
-        criar_json(entry_usuario_nome.get(), entry_dbname.get(), entry_dbuser.get(), entry_dbpass.get(),
-                   entry_dbhost.get())
+        if entry_usuario_nome.get() == "" or entry_dbname.get() == "" or entry_dbuser.get() == "" or entry_dbpass.get() == "" or entry_dbhost.get() == "" or entry_dbport.get() == "":
+            mensagens_de_erro("É necessário preencher todos os campos.")
+        else:
+            criar_json(entry_usuario_nome.get().upper(), entry_dbname.get(), entry_dbuser.get(), entry_dbpass.get(),
+                       entry_dbhost.get(), entry_dbport.get())
 
     labelframe_credenciais = LabelFrame(credenciais, text="Inserir dados")
     labelframe_credenciais.pack(fill=X, side=TOP, padx=5)
@@ -134,6 +156,10 @@ def salvar_credenciais():
 
     entry_dbhost = Entry(labelframe_credenciais, width=30)
 
+    label_dbport = Label(labelframe_credenciais, text="DB PORT:", width=10, height=1, anchor=W)
+
+    entry_dbport = Entry(labelframe_credenciais, width=30)
+
     button_cre_salvar = Button(credenciais, text="Salvar", width=10, height=1, command=salvar)
 
     label_usuario_nome.grid(row=0, column=0)
@@ -141,14 +167,32 @@ def salvar_credenciais():
     label_dbuser.grid(row=2, column=0)
     label_dbpass.grid(row=3, column=0)
     label_dbhost.grid(row=4, column=0)
+    label_dbport.grid(row=5, column=0)
 
     entry_usuario_nome.grid(row=0, column=1)
     entry_dbname.grid(row=1, column=1)
     entry_dbuser.grid(row=2, column=1)
     entry_dbpass.grid(row=3, column=1)
     entry_dbhost.grid(row=4, column=1)
+    entry_dbport.grid(row=5, column=1)
 
     button_cre_salvar.pack(side=LEFT, padx=5)
+
+    try:
+        if json_arquivo.exists():
+            with open(json_arquivo) as js:
+                dados = json.load(js)
+
+                entry_usuario_nome.insert(0, dados["atendente"])
+                entry_dbname.insert(0, dados["dbName"])
+                entry_dbuser.insert(0, dados["dbUser"])
+                entry_dbpass.insert(0, dados["dbPass"])
+                entry_dbhost.insert(0, dados["dbHost"])
+                entry_dbport.insert(0, dados["dbPort"])
+        else:
+            entry_dbport.insert(0, "5432")
+    except Exception as e:
+        mensagens_de_erro(e)
 
     credenciais.mainloop()
 
@@ -159,7 +203,6 @@ def multithreading(funcao):
 
 def auto_completar(event):
     try:
-
         if json_arquivo.exists():
             with open(json_arquivo) as js:
                 dados = json.load(js)
@@ -168,7 +211,6 @@ def auto_completar(event):
         entry_atendete.insert(0, dados["atendente"])
 
         js.close()
-
     except Exception as e:
         mensagens_de_erro(e)
 
@@ -209,7 +251,6 @@ def conectar():
     global atendente
 
     try:
-
         if json_arquivo.exists():
             with open(json_arquivo) as js:
                 dados = json.load(js)
@@ -224,12 +265,12 @@ def conectar():
                 DB_USER = dados["dbUser"]
                 DB_PASS = dados["dbPass"]
                 DB_HOST = dados["dbHost"]
+                DB_PORT = dados["dbPort"]
 
-            banco = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST)
+            banco = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT)
             multithreading(carregar_agenda)
 
             js.close()
-
     except Exception as e:
         mensagens_de_erro(e)
 
@@ -245,14 +286,39 @@ def reconectar_banco():
 
 def banco_queries(**kwargs):
     global banco
+    global id
 
     variaveis = kwargs.get("variaveis")
-
     modificar = kwargs.get("modificar")
     carregar = kwargs.get("carregar")
     pesquisar = kwargs.get("pesquisar")
 
-    if len(entry_atendete.get()) > 50:
+    try:
+        if modificar:
+            cursor = banco.cursor()
+            cursor.execute(modificar, variaveis)
+            banco.commit()
+            carregar_agenda()
+        if carregar:
+            cursor = banco.cursor()
+            cursor.execute(carregar)
+            id = ""
+            return cursor
+        if pesquisar:
+            cursor = banco.cursor()
+            cursor.execute(pesquisar, variaveis)
+            id = ""
+            return cursor
+    except Exception as e:
+        mensagens_de_erro(e)
+
+
+def inserir_agenda():
+    global id
+
+    if entry_atendete.get() == "" or entry_solicitante.get() == "" or entry_data.get() == "" or entry_hora.get() == "":
+        messagebox.showerror('Erro', "Todos os campos precisam está preenchidos!")
+    elif len(entry_atendete.get()) > 50:
         mensagens_de_erro("Atendente não pode ter mais que 30 caracteres.")
     elif len(entry_solicitante.get()) > 50:
         mensagens_de_erro("Solicitante não pode ter mais que 30 caracteres.")
@@ -263,29 +329,7 @@ def banco_queries(**kwargs):
     elif len(entry_assunto.get()) > 50:
         mensagens_de_erro("Assunto não pode ter mais que 30 caracteres.")
     else:
-        try:
-            if modificar:
-                cursor = banco.cursor()
-                cursor.execute(modificar, variaveis)
-                banco.commit()
-                carregar_agenda()
-            if carregar:
-                cursor = banco.cursor()
-                cursor.execute(carregar)
-                return cursor
-            if pesquisar:
-                cursor = banco.cursor()
-                cursor.execute(pesquisar, variaveis)
-                return cursor
-        except Exception as e:
-            mensagens_de_erro(e)
-
-
-def inserir_agenda():
-    if entry_atendete.get() == "" or entry_solicitante.get() == "" or entry_data.get() == "" or entry_hora.get() == "":
-        messagebox.showerror('Erro', 'Todos os campos precisam está preenchidos!')
-    else:
-        pergunta = messagebox.askyesno('Inserir na agenda', 'Inserir as informações na agenda?')
+        pergunta = messagebox.askyesno("Inserir na agenda", "Inserir as informações na agenda?")
         if pergunta:
             variaveis = (entry_atendete.get().upper(),
                          entry_solicitante.get().upper(),
@@ -298,28 +342,35 @@ def inserir_agenda():
                          text_mensagem.get("1.0", END).upper())
             banco_queries(modificar=inserir_query, variaveis=variaveis)
 
+            limpar_campos()
+
 
 def carregar_agenda():
-    global id
-
     cursor = banco_queries(carregar=carregar_query)
     inserir_visualizador(cursor)
-
-    id = ""
 
 
 def alterar_agenda():
     global id
 
-    pergunta = messagebox.askyesno("Alteração",
-                                   'Essa ação irá alterar o Processo com o ID: "' + str(
-                                       id) + '" com os valores dos campos acima, deseja continuar?')
-    if pergunta:
-        if status == "RESOLVIDO":
-            mensagens_de_erro("Não é possível editar uma tarefa já concluída.")
-        elif id == "":
-            mensagens_de_erro("Selecione um item na Agenda primeiro.")
-        else:
+    if status == "RESOLVIDO":
+        mensagens_de_erro("Não é possível editar uma tarefa já concluída.")
+    elif id == "":
+        mensagens_de_erro("Selecione um item na Agenda primeiro.")
+    elif len(entry_atendete.get()) > 50:
+        mensagens_de_erro("Atendente não pode ter mais que 50 caracteres.")
+    elif len(entry_solicitante.get()) > 50:
+        mensagens_de_erro("Solicitante não pode ter mais que 50 caracteres.")
+    elif len(entry_data.get()) > 11:
+        mensagens_de_erro("Data não pode ter mais que 11 caracteres.")
+    elif len(entry_hora.get()) > 5:
+        mensagens_de_erro("Hora não pode ter mais que 5 caracteres.")
+    elif len(entry_assunto.get()) > 50:
+        mensagens_de_erro("Assunto não pode ter mais que 50 caracteres.")
+    else:
+        pergunta = messagebox.askyesno("Alteração", "Alterar a tarefa na Agenda com o id: '" + str(id) + "' ?")
+
+        if pergunta:
             variaveis = (entry_atendete.get().upper(), entry_solicitante.get().upper(), entry_assunto.get().upper(),
                          entry_data.get().upper(), entry_hora.get().upper(), variavel.get().upper(),
                          text_mensagem.get("1.0", END).upper(), id)
@@ -332,32 +383,33 @@ def concluido_agenda():
     global atendente
     global status
 
-    pergunta = messagebox.askyesno("Concluir Tarefa", "Marcar a tarefa com o ID: '" + str(id) + "' como concluída?")
+    if id == "":
+        mensagens_de_erro("Selecione um item na Agenda primeiro.")
+    elif status == "RESOLVIDO":
+        mensagens_de_erro("A tarefa já está marcada como resolvida.")
+    else:
+        pergunta = messagebox.askyesno("Concluir Tarefa", "Marcar a tarefa com o ID: '" + str(id) + "' como concluída?")
 
-    if pergunta:
-        if status == "RESOLVIDO":
-            mensagens_de_erro("A tarefa já está marcada como resolvida.")
-        elif id == "":
-            mensagens_de_erro("Selecione um item na Agenda primeiro.")
-        else:
-            variaveis = ("RESOLVIDO", atendente, id)
+        if pergunta:
+            variaveis = ("RESOLVIDO", atendente.upper(), id)
 
             banco_queries(modificar=concluido_query, variaveis=variaveis)
 
 
 def reabrir_tarefa():
     global id
+    global status
     global atendente
 
-    pergunta = messagebox.askyesno("Reabrir Tarefa", "Reabrir a tarefa com o ID: '" + str(id) + "' ?")
+    if id == "":
+        mensagens_de_erro("Selecione um item na Agenda primeiro.")
+    elif status == "URGENTE" or status == "NORMAL":
+        mensagens_de_erro("A tarefa já está em aberto.")
+    else:
+        pergunta = messagebox.askyesno("Reabrir Tarefa", "Reabrir a tarefa com o ID: '" + str(id) + "' ?")
 
-    if pergunta:
-        if status == "URGENTE" or status == "NORMAL":
-            mensagens_de_erro("A tarefa já está em aberto.")
-        elif id == "":
-            mensagens_de_erro("Selecione um item na Agenda primeiro.")
-        else:
-            variaveis = (variavel.get(), "AINDA EM ABERTO", atendente, id)
+        if pergunta:
+            variaveis = (variavel.get(), "AINDA EM ABERTO", atendente.upper(), id)
 
             banco_queries(modificar=reabrir_query, variaveis=variaveis)
 
@@ -365,12 +417,12 @@ def reabrir_tarefa():
 def deletar_agenda():
     global id
 
-    pergunta = messagebox.askyesno("Deletar",
-                                   "Deletar a entrada com o id: '" + str(id) + "'")
-    if pergunta:
-        if id == "":
-            mensagens_de_erro("Selecione um item na Agenda primeiro.")
-        else:
+    if id == "":
+        mensagens_de_erro("Selecione um item na Agenda primeiro.")
+    else:
+        pergunta = messagebox.askyesno("Deletar",
+                                       "Deletar a entrada com o id: '" + str(id) + "'")
+        if pergunta:
             variaveis = (id,)
             banco_queries(modificar=deletar_query, variaveis=variaveis)
 
@@ -599,7 +651,7 @@ atendente = pathlib.Path(user_home + "/agenda")
 if not atendente.exists():
     os.makedirs(user_home + "/agenda")
 
-conectar()
+multithreading(conectar)
 
 root.bind_all("<Any-KeyPress>", reset_timer)
 root.bind_all("<Any-ButtonPress>", reset_timer)
