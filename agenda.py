@@ -129,8 +129,8 @@ def salvar_credenciais():
     def salvar():
         if entry_usuario_nome.get() == "" or entry_dbname.get() == "" or entry_dbuser.get() == "" or entry_dbpass.get() == "" or entry_dbhost.get() == "" or entry_dbport.get() == "":
             mensagens_de_erro("É necessário preencher todos os campos.")
-        elif len(entry_usuario_nome.get()) > 50:
-            mensagens_de_erro("Usuário não pode ter mais que 50 caracteres.")
+        elif len(entry_usuario_nome.get()) > 10:
+            mensagens_de_erro("Usuário não pode ter mais que 10 caracteres.")
         else:
             criar_json(entry_usuario_nome.get().upper(), entry_dbname.get(), entry_dbuser.get(), entry_dbpass.get(),
                        entry_dbhost.get(), entry_dbport.get())
@@ -324,8 +324,8 @@ def inserir_agenda():
 
     if entry_atendete.get() == "" or entry_solicitante.get() == "" or entry_data.get() == "" or entry_hora.get() == "":
         messagebox.showerror('Erro', "Todos os campos precisam está preenchidos!")
-    elif len(entry_atendete.get()) > 50:
-        mensagens_de_erro("Atendente não pode ter mais que 50 caracteres.")
+    elif len(entry_atendete.get()) > 10:
+        mensagens_de_erro("Atendente não pode ter mais que 10 caracteres.")
     elif len(entry_solicitante.get()) > 50:
         mensagens_de_erro("Solicitante não pode ter mais que 50 caracteres.")
     elif len(entry_data.get()) > 11:
@@ -363,8 +363,8 @@ def alterar_agenda():
         mensagens_de_erro("Não é possível editar uma tarefa já concluída.")
     elif id == "":
         mensagens_de_erro("Selecione um item na Agenda primeiro.")
-    elif len(entry_atendete.get()) > 50:
-        mensagens_de_erro("Atendente não pode ter mais que 50 caracteres.")
+    elif len(entry_atendete.get()) > 10:
+        mensagens_de_erro("Atendente não pode ter mais que 10 caracteres.")
     elif len(entry_solicitante.get()) > 50:
         mensagens_de_erro("Solicitante não pode ter mais que 50 caracteres.")
     elif len(entry_data.get()) > 11:
@@ -397,7 +397,7 @@ def concluido_agenda():
         pergunta = messagebox.askyesno("Concluir Tarefa", "Marcar a tarefa com o ID: '" + str(id) + "' como concluída?")
 
         if pergunta:
-            variaveis = ("RESOLVIDO", atendente.upper() + " às: " + data_hora()[0] + " no dia: " + data_hora()[1], id)
+            variaveis = ("RESOLVIDO", atendente.upper() + " - " + data_hora()[1] + " - " + data_hora()[0], id)
 
             banco_queries(modificar=concluido_query, variaveis=variaveis)
 
@@ -416,7 +416,7 @@ def reabrir_tarefa():
 
         if pergunta:
             variaveis = (variavel.get(), "AINDA EM ABERTO",
-                         atendente.upper() + " às: " + data_hora()[0] + " no dia: " + data_hora()[1], id)
+                         atendente.upper() + " - " + data_hora()[1] + " - " + data_hora()[0], id)
 
             banco_queries(modificar=reabrir_query, variaveis=variaveis)
 
