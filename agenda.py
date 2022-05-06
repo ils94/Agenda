@@ -129,6 +129,8 @@ def salvar_credenciais():
     def salvar():
         if entry_usuario_nome.get() == "" or entry_dbname.get() == "" or entry_dbuser.get() == "" or entry_dbpass.get() == "" or entry_dbhost.get() == "" or entry_dbport.get() == "":
             mensagens_de_erro("É necessário preencher todos os campos.")
+        elif len(entry_usuario_nome.get()) > 50:
+            mensagens_de_erro("Usuário não pode ter mais que 50 caracteres.")
         else:
             criar_json(entry_usuario_nome.get().upper(), entry_dbname.get(), entry_dbuser.get(), entry_dbpass.get(),
                        entry_dbhost.get(), entry_dbport.get())
@@ -236,10 +238,14 @@ def data_hora():
     hora = datetime.now()
     hora_atual = hora.strftime("%H:%M")
 
+    return hora_atual, dia_format_ext
+
+
+def inserir_data_hora():
     entry_hora.delete(0, END)
     entry_data.delete(0, END)
-    entry_hora.insert(0, hora_atual)
-    entry_data.insert(0, dia_format_ext)
+    entry_hora.insert(0, data_hora()[0])
+    entry_data.insert(0, data_hora()[1])
 
 
 def mensagens_de_erro(e):
@@ -319,15 +325,15 @@ def inserir_agenda():
     if entry_atendete.get() == "" or entry_solicitante.get() == "" or entry_data.get() == "" or entry_hora.get() == "":
         messagebox.showerror('Erro', "Todos os campos precisam está preenchidos!")
     elif len(entry_atendete.get()) > 50:
-        mensagens_de_erro("Atendente não pode ter mais que 30 caracteres.")
+        mensagens_de_erro("Atendente não pode ter mais que 50 caracteres.")
     elif len(entry_solicitante.get()) > 50:
-        mensagens_de_erro("Solicitante não pode ter mais que 30 caracteres.")
+        mensagens_de_erro("Solicitante não pode ter mais que 50 caracteres.")
     elif len(entry_data.get()) > 11:
         mensagens_de_erro("Data não pode ter mais que 11 caracteres.")
     elif len(entry_hora.get()) > 5:
         mensagens_de_erro("Hora não pode ter mais que 5 caracteres.")
     elif len(entry_assunto.get()) > 50:
-        mensagens_de_erro("Assunto não pode ter mais que 30 caracteres.")
+        mensagens_de_erro("Assunto não pode ter mais que 50 caracteres.")
     else:
         pergunta = messagebox.askyesno("Inserir na agenda", "Inserir as informações na agenda?")
         if pergunta:
@@ -391,7 +397,7 @@ def concluido_agenda():
         pergunta = messagebox.askyesno("Concluir Tarefa", "Marcar a tarefa com o ID: '" + str(id) + "' como concluída?")
 
         if pergunta:
-            variaveis = ("RESOLVIDO", atendente.upper(), id)
+            variaveis = ("RESOLVIDO", atendente.upper() + " às: " + data_hora()[0] + " no dia: " + data_hora()[1], id)
 
             banco_queries(modificar=concluido_query, variaveis=variaveis)
 
@@ -409,7 +415,8 @@ def reabrir_tarefa():
         pergunta = messagebox.askyesno("Reabrir Tarefa", "Reabrir a tarefa com o ID: '" + str(id) + "' ?")
 
         if pergunta:
-            variaveis = (variavel.get(), "AINDA EM ABERTO", atendente.upper(), id)
+            variaveis = (variavel.get(), "AINDA EM ABERTO",
+                         atendente.upper() + " às: " + data_hora()[0] + " no dia: " + data_hora()[1], id)
 
             banco_queries(modificar=reabrir_query, variaveis=variaveis)
 
@@ -540,7 +547,7 @@ frame_1.pack(fill=X, pady=5)
 
 button_adicionar = Button(frame_1, text='Adicionar', width=10, height=1, command=lambda: multithreading(inserir_agenda))
 button_editar = Button(frame_1, text='Editar', width=10, height=1, command=lambda: multithreading(alterar_agenda))
-button_tempo = Button(frame_1, text='Hora e Dia', width=10, height=1, command=data_hora)
+button_tempo = Button(frame_1, text='Hora e Dia', width=10, height=1, command=inserir_data_hora)
 
 button_adicionar.pack(side=LEFT, padx=5)
 button_editar.pack(side=LEFT, padx=5)
