@@ -245,14 +245,16 @@ def data_hora():
     hora = datetime.now()
     hora_atual = hora.strftime("%H:%M")
 
-    return hora_atual, dia_format_ext
+    return hora_atual, dia_format_ext.upper()
 
 
 def inserir_data_hora():
+    dataHora = data_hora()
+
     entry_hora.delete(0, END)
     entry_data.delete(0, END)
-    entry_hora.insert(0, data_hora()[0])
-    entry_data.insert(0, data_hora()[1])
+    entry_hora.insert(0, dataHora[0])
+    entry_data.insert(0, dataHora[1])
 
 
 def mensagens_de_erro(e):
@@ -396,6 +398,8 @@ def concluido_agenda():
     global atendente
     global status
 
+    dataHora = data_hora()
+
     if id == "":
         mensagens_de_erro("Selecione um item na Agenda primeiro.")
     elif status == "RESOLVIDO":
@@ -404,7 +408,7 @@ def concluido_agenda():
         pergunta = messagebox.askyesno("Concluir Tarefa", "Marcar a tarefa com o ID: '" + str(id) + "' como concluída?")
 
         if pergunta:
-            variaveis = ("RESOLVIDO", atendente.upper() + " - " + data_hora()[1] + " - " + data_hora()[0], id)
+            variaveis = ("RESOLVIDO", atendente.upper() + " - " + dataHora[1] + " - " + dataHora[0], id)
 
             banco_queries(modificar=concluido_query, variaveis=variaveis)
 
@@ -413,6 +417,8 @@ def reabrir_tarefa():
     global id
     global status
     global atendente
+
+    dataHora = data_hora()
 
     if id == "":
         mensagens_de_erro("Selecione um item na Agenda primeiro.")
@@ -423,7 +429,7 @@ def reabrir_tarefa():
 
         if pergunta:
             variaveis = (variavel.get(), "AINDA EM ABERTO",
-                         atendente.upper() + " - " + data_hora()[1] + " - " + data_hora()[0], id)
+                         atendente.upper() + " - " + dataHora[1] + " - " + dataHora[0], id)
 
             banco_queries(modificar=reabrir_query, variaveis=variaveis)
 
