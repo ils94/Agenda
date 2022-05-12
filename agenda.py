@@ -456,6 +456,7 @@ def pesquisar_agenda(event):
         "%" + entry_pesquisar.get() + "%",
         "%" + entry_pesquisar.get() + "%",
         "%" + entry_pesquisar.get() + "%",
+        "%" + entry_pesquisar.get() + "%",
         "%" + entry_pesquisar.get() + "%")
 
     cursor = banco_queries(pesquisar=pesquisar_query, variaveis=variaveis)
